@@ -3084,6 +3084,37 @@ async function deleteMaterial(id){
 }
 
 // ============================================================
+// UTILITÁRIO DE MANUTENÇÃO — uso manual pelo console do navegador
+// Reatribui todos os documentos de um userId antigo para o usuário
+// logado agora. Só funciona com as regras temporárias liberadas
+// (ver firestore.rules.TEMPORARIO). Não é usado por nenhum botão.
+// Uso no console: migrarDadosParaUsuarioAtual('uid_antigo_aqui')
+// ============================================================
+async function migrarDadosParaUsuarioAtual(uidAntigo){
+  if(!state.user){ console.error('Faça login primeiro.'); return; }
+  if(!confirm('Reatribuir TODOS os documentos do usuário '+uidAntigo+' para a conta atual ('+state.user.uid+')? Só faça isso com as regras temporárias publicadas.')) return;
+  const colecoes = ['disciplinas','turmas','aulas','diarioAula','eventos','bancoQuestoes','materiais','alunos','frequencia'];
+  let total = 0;
+  for(const col of colecoes){
+    let snap;
+    try{ snap = await db.collection(col).where('userId','==',uidAntigo).get(); }
+    catch(error){ console.error('Erro ao ler '+col+': '+error.message); continue; }
+    if(snap.empty){ console.log(col+': nenhum documento.'); continue; }
+    const docs = snap.docs;
+    for(let i=0;i<docs.length;i+=400){
+      const batch = db.batch();
+      docs.slice(i,i+400).forEach(function(doc){ batch.update(doc.ref, {userId: state.user.uid}); });
+      try{ await batch.commit(); }
+      catch(error){ console.error('Erro ao gravar '+col+': '+error.message); continue; }
+    }
+    console.log(col+': '+docs.length+' documento(s) reatribuído(s).');
+    total += docs.length;
+  }
+  console.log('TOTAL migrado: '+total+' documento(s).');
+  alert('Migração concluída: '+total+' documento(s) reatribuídos. Publique de volta as regras definitivas e atualize a página.');
+}
+
+// ============================================================
 // INICIALIZAÇÃO DO APP (chamado pelo listener de auth em init())
 // ============================================================
 async function bootApp(){
