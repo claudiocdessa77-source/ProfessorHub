@@ -55,6 +55,14 @@
   .tab-btn.active{ border-color:#C89B3C; color:#1B2A4A; background:#fff; }
   .badge{ font-family:'IBM Plex Mono',monospace; font-size:.7rem; }
   input:focus, select:focus, textarea:focus{ outline: 2px solid #C89B3C; outline-offset:1px; }
+  [contenteditable][data-placeholder]:empty:before{ content: attr(data-placeholder); color:#9CA3AF; pointer-events:none; }
+  [contenteditable]:focus{ outline: 2px solid #C89B3C; outline-offset:1px; }
+  .rich-content ul{ list-style:disc; padding-left:1.25rem; margin:.35rem 0; }
+  .rich-content ol{ list-style:decimal; padding-left:1.25rem; margin:.35rem 0; }
+  .rich-content p{ margin:.4rem 0; }
+  .rich-content b, .rich-content strong{ font-weight:600; }
+  .rich-content i, .rich-content em{ font-style:italic; }
+  .rich-content a{ color:#1B2A4A; text-decoration:underline; }
   @media (prefers-reduced-motion: reduce){ *{ animation:none !important; transition:none !important; } }
   @media print{
     body *{ visibility:hidden; }
@@ -313,6 +321,12 @@ function escapeHtml(str){
   return String(str)
     .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
     .replaceAll('"','&quot;').replaceAll("'",'&#039;');
+}
+
+function stripHtml(html){
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html || '';
+  return tmp.textContent || tmp.innerText || '';
 }
 
 function fmtDate(d){
@@ -1681,7 +1695,7 @@ function renderAulasResults(disciplinaId){
   document.getElementById('aulasResultsBox').innerHTML = `
     <div class="divide-y divide-gray-100">
       ${items.length? items.map(function(x){
-        const preview = (x.resumo || x.conteudo || '').replace(/\s+/g,' ').trim();
+        const preview = (x.resumo ? stripHtml(x.resumo) : (x.conteudo||'')).replace(/\s+/g,' ').trim();
         const previewShort = preview.length>220 ? preview.slice(0,220)+'…' : preview;
         return `
         <div class="px-5 py-4 cursor-pointer hover:bg-gray-50" onclick="openAulaViewModal('${x.id}')">
@@ -1722,7 +1736,7 @@ function openAulaViewModal(aulaId){
       <h3 class="font-display font-semibold text-lg text-navy-900 mb-3">${escapeHtml(x.titulo)}</h3>
       ${x.resumo ? `<div class="bg-gold-100 border border-gold-500/30 rounded-lg p-3 mb-4">
         <div class="text-xs font-semibold text-gold-600 uppercase tracking-wide mb-1">Resumo</div>
-        <div class="text-sm text-navy-900 whitespace-pre-wrap">${escapeHtml(x.resumo)}</div>
+        <div class="rich-content text-sm text-navy-900">${x.resumo}</div>
       </div>` : ''}
       <div class="text-sm text-navy-900 whitespace-pre-wrap max-h-[42vh] overflow-y-auto leading-relaxed">${x.conteudo?escapeHtml(x.conteudo):'<span class="text-gray-400">Sem conteúdo registrado.</span>'}</div>
       <div class="flex flex-wrap justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
@@ -1748,6 +1762,29 @@ async function copiarConteudoAula(aulaId){
   }
 }
 
+async function copiarHtmlComFormatacao(html, textoPlano, mensagemSucesso){
+  try{
+    if(window.ClipboardItem){
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], {type:'text/html'}),
+        'text/plain': new Blob([textoPlano], {type:'text/plain'})
+      });
+      await navigator.clipboard.write([item]);
+    } else {
+      await navigator.clipboard.writeText(textoPlano);
+    }
+    toast(mensagemSucesso);
+  } catch(error){
+    toast('Não foi possível copiar automaticamente. Selecione o texto manualmente.', 'error');
+  }
+}
+
+function copiarResumoAula(){
+  const el = document.getElementById('aulaResumoEditorQuick');
+  if(!el) return;
+  copiarHtmlComFormatacao(el.innerHTML, el.innerText, 'Resumo copiado.');
+}
+
 function openAulaResumoModal(aulaId){
   const x = state.aulas.find(function(i){ return i.id===aulaId; });
   if(!x) return;
@@ -1755,8 +1792,12 @@ function openAulaResumoModal(aulaId){
     <form id="aulaResumoForm" class="p-5">
       <h3 class="font-display font-semibold text-navy-900 mb-1">Resumo da aula</h3>
       <p class="text-xs text-gray-500 mb-4">${escapeHtml(x.titulo)}</p>
-      <textarea id="aulaResumoTexto" rows="8" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Cole ou escreva o resumo desta aula...">${escapeHtml(x.resumo||'')}</textarea>
-      <div class="flex justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
+      <div id="aulaResumoEditorQuick" contenteditable="true" data-placeholder="Cole ou escreva o resumo desta aula..." class="rich-content w-full min-h-[180px] rounded-lg border border-gray-300 px-3 py-2 text-sm overflow-y-auto">${x.resumo||''}</div>
+      <p class="text-[11px] text-gray-400 mt-1.5">Colar aqui mantém a formatação (negrito, itálico, listas) do texto de origem.</p>
+      <div class="flex flex-wrap justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
+        <button type="button" onclick="copiarResumoAula()" class="px-4 py-2 text-sm rounded-lg border border-gray-300">📋 Copiar</button>
+        <button type="button" onclick="openAulaFormModal('${state.currentDisciplinaId}','${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Editar aula</button>
+        <button type="button" onclick="printAula('${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">🖨️ Imprimir</button>
         <button type="button" onclick="openAulaViewModal('${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Voltar</button>
         <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-navy-800 text-white font-medium">Salvar resumo</button>
       </div>
@@ -1767,7 +1808,8 @@ function openAulaResumoModal(aulaId){
 
 async function submitAulaResumo(e, aulaId){
   e.preventDefault();
-  const resumo = (document.getElementById('aulaResumoTexto').value||'').trim();
+  const editor = document.getElementById('aulaResumoEditorQuick');
+  const resumo = editor ? editor.innerHTML.trim() : '';
   try{
     await db.collection('aulas').doc(aulaId).update({ resumo: resumo||null, atualizadoEm: new Date().toISOString() });
   } catch(error){ toast('Erro ao salvar resumo: '+error.message,'error'); return; }
@@ -1785,9 +1827,10 @@ function printAula(aulaId){
   if(x.data) meta.push(fmtDate(x.data));
   if(x.unidade) meta.push(x.unidade);
   document.getElementById('printArea').innerHTML = `
-    <div style="font-family:Arial,Helvetica,sans-serif; max-width:720px; margin:0 auto; color:#111;">
+    <div class="rich-content" style="font-family:Arial,Helvetica,sans-serif; max-width:720px; margin:0 auto; color:#111;">
       ${meta.length?`<div style="font-size:12px; color:#666; margin-bottom:6px;">${meta.map(function(m){ return escapeHtml(m); }).join(' &nbsp;·&nbsp; ')}</div>`:''}
       <h1 style="font-size:20px; margin:0 0 18px; border-bottom:2px solid #1B2A4A; padding-bottom:10px;">${escapeHtml(x.titulo)}</h1>
+      ${x.resumo?`<div style="background:#F3E8CE; border-radius:6px; padding:10px 12px; margin-bottom:16px; font-size:13px;"><strong>Resumo:</strong> ${x.resumo}</div>`:''}
       <div style="white-space:pre-wrap; font-size:13px; line-height:1.7;">${x.conteudo?escapeHtml(x.conteudo):'Sem conteúdo registrado.'}</div>
     </div>`;
   window.print();
@@ -1824,7 +1867,7 @@ function openAulaFormModal(disciplinaId, aulaId){
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Resumo (opcional)</label>
-          <textarea name="resumo" rows="3" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">${escapeHtml(x?x.resumo:'')}</textarea>
+          <div id="aulaResumoEditorForm" contenteditable="true" data-placeholder="Cole ou escreva o resumo desta aula..." class="rich-content w-full min-h-[90px] rounded-lg border border-gray-300 px-3 py-2 text-sm overflow-y-auto">${x?(x.resumo||''):''}</div>
         </div>
       </div>
       <div class="flex justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
@@ -1840,13 +1883,14 @@ async function submitAulaForm(e, disciplinaId, aulaId){
   e.preventDefault();
   const fd = new FormData(e.target);
   const nowIso = new Date().toISOString();
+  const resumoEditor = document.getElementById('aulaResumoEditorForm');
   const payload = {
     titulo: (fd.get('titulo')||'').trim(),
     data: fd.get('data')||null,
     unidade: (fd.get('unidade')||'').trim()||null,
     ordem: fd.get('ordem')? parseInt(fd.get('ordem')) : null,
     conteudo: (fd.get('conteudo')||'').trim()||null,
-    resumo: (fd.get('resumo')||'').trim()||null,
+    resumo: resumoEditor ? (resumoEditor.innerHTML.trim()||null) : null,
     atualizadoEm: nowIso
   };
   try{
