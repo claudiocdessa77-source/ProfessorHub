@@ -107,6 +107,7 @@
     <div class="flex items-center gap-3 text-xs">
       <button onclick="showView('dashboard')" class="text-white/80">Dashboard</button>
       <button onclick="showView('disciplinas')" class="text-white/80">Disciplinas</button>
+      <button onclick="showView('horario')" class="text-white/80">Horário</button>
       <button onclick="showView('agenda')" class="text-white/80">Agenda</button>
       <button onclick="logout()" class="text-white/60">Sair</button>
     </div>
@@ -125,6 +126,10 @@
         <button onclick="showView('disciplinas')" data-nav="disciplinas" class="nav-item w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 flex items-center gap-2.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
           Disciplinas
+        </button>
+        <button onclick="showView('horario')" data-nav="horario" class="nav-item w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 flex items-center gap-2.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Horário
         </button>
         <button onclick="showView('agenda')" data-nav="agenda" class="nav-item w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 flex items-center gap-2.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -215,6 +220,8 @@
         <div id="tab-questoes" class="detail-tab hidden"></div>
         <div id="tab-materiais" class="detail-tab hidden"></div>
       </div>
+
+      <div id="view-horario" class="ph-view p-6 md:p-8 hidden"></div>
 
       <div id="view-agenda" class="ph-view p-6 md:p-8 hidden">
         <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -395,6 +402,7 @@ function showView(view){
   if(navBtn) navBtn.classList.add('active');
   if(view==='dashboard') renderDashboard();
   if(view==='disciplinas') renderDisciplinasList();
+  if(view==='horario') renderHorarioGeral();
   if(view==='agenda') renderAgendaGeral();
 }
 
@@ -1060,6 +1068,59 @@ async function removerHorarioTurma(turmaId, horarioId){
   catch(error){ toast('Erro ao remover horário: '+error.message,'error'); return; }
   await loadAllData();
   renderHorarioTab(state.currentDisciplinaId);
+}
+
+// ------------- Horário geral (visão consolidada, todas as disciplinas) -------------
+function renderHorarioGeral(){
+  const box = document.getElementById('view-horario');
+  const totalEntries = state.turmas.reduce(function(sum,t){ return sum + (t.horarios||[]).length; }, 0);
+  if(totalEntries===0){
+    box.innerHTML = `
+      <div class="mb-6">
+        <h1 class="font-display font-bold text-2xl text-navy-900">Horário</h1>
+        <p class="text-sm text-gray-500 mt-1">Visão consolidada das turmas por dia e horário</p>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-400 text-sm">
+        Nenhum horário configurado ainda. Entre em cada disciplina → aba Horário, para cadastrar os dias e horários de cada turma.
+      </div>`;
+    return;
+  }
+  const grid = {};
+  for(let p=1;p<=5;p++){ grid[p] = {1:[],2:[],3:[],4:[],5:[]}; }
+  state.turmas.forEach(function(t){
+    (t.horarios||[]).forEach(function(h){
+      if(!h.periodo || !grid[h.periodo] || !grid[h.periodo][h.diaSemana]) return;
+      const disciplina = state.disciplinas.find(function(d){ return d.id===t.disciplinaId; });
+      grid[h.periodo][h.diaSemana].push({ turma: t.nome, disciplina: disciplina?disciplina.nome:'—' });
+    });
+  });
+  const diasCols = [1,2,3,4,5];
+  box.innerHTML = `
+    <div class="mb-6">
+      <h1 class="font-display font-bold text-2xl text-navy-900">Horário</h1>
+      <p class="text-sm text-gray-500 mt-1">Visão consolidada das turmas por dia e horário, reunindo todas as disciplinas</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="border-b border-gray-200">
+            <th class="px-3 py-2.5 text-left text-xs font-mono uppercase text-gray-500">Horário</th>
+            ${diasCols.map(function(d){ return `<th class="px-3 py-2.5 text-left text-xs font-mono uppercase text-gray-500">${DIAS_SEMANA_ABREV[d]}</th>`; }).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${[1,2,3,4,5].map(function(p){ return `
+            <tr class="border-b border-gray-100 last:border-0">
+              <td class="px-3 py-3 font-medium text-navy-900 whitespace-nowrap">${p}º horário</td>
+              ${diasCols.map(function(d){
+                const itens = grid[p][d];
+                return `<td class="px-3 py-3 align-top">${itens.length? itens.map(function(it){ return `<div class="mb-1.5 last:mb-0"><div class="text-sm text-navy-900 font-medium leading-tight">${escapeHtml(it.turma)}</div><div class="text-xs text-gray-500 leading-tight">${escapeHtml(it.disciplina)}</div></div>`; }).join('') : '<span class="text-gray-300">—</span>'}</td>`;
+              }).join('')}
+            </tr>`; }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-xs text-gray-400 mt-3">Montado a partir do que está configurado em cada disciplina → aba Horário. Para editar, acesse a disciplina correspondente.</p>`;
 }
 
 // ============================================================
