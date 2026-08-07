@@ -1078,7 +1078,8 @@ function renderFreqCalendario(disciplinaId){
     <div class="grid grid-cols-7 gap-1 max-w-[280px]">
       ${FREQ_DIAS_SEMANA.map(function(d){ return `<div class="text-center text-[10px] font-bold text-gray-400 uppercase py-1">${d}</div>`; }).join('')}
       ${diasHtml}
-    </div>`;
+    </div>
+    <button onclick="printFrequenciaMes('${disciplinaId}')" class="mt-3 text-sm text-navy-800 border border-gray-300 rounded-lg px-3 py-1.5 hover:bg-gray-50">🖨️ Imprimir mês</button>`;
 }
 
 function onChangeFreqCalAnoMes(disciplinaId){
@@ -1206,6 +1207,79 @@ function printFrequenciaDia(disciplinaId){
       <div style="margin-top:40px; font-size:12px;">Assinatura do professor: _______________________________________________</div>
     </div>`;
   window.print();
+}
+
+function printFrequenciaMes(disciplinaId){
+  if(!state.freq.regTurmaId){ toast('Selecione uma turma para imprimir.', 'error'); return; }
+  const turma = state.turmas.find(function(t){ return t.id===state.freq.regTurmaId; });
+  const disciplina = state.disciplinas.find(function(d){ return d.id===disciplinaId; });
+  const alunosDaTurma = state.alunos.filter(function(a){ return a.turmaId===state.freq.regTurmaId; }).sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt-BR'); });
+  if(alunosDaTurma.length===0){ toast('Nenhum aluno cadastrado nesta turma.', 'error'); return; }
+  const ano = state.freq.regAno, mes = state.freq.regMes;
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  const registrosDoMes = {};
+  state.frequencia.filter(function(f){ return f.turmaId===state.freq.regTurmaId && f.data.indexOf(ano+'-'+String(mes).padStart(2,'0'))===0; }).forEach(function(f){
+    registrosDoMes[parseInt(f.data.split('-')[2],10)] = f.faltas;
+  });
+  if(Object.keys(registrosDoMes).length===0){ toast('Nenhum registro de frequência neste mês para esta turma.', 'error'); return; }
+
+  let theadDias = '';
+  for(let d=1; d<=diasNoMes; d++){ theadDias += `<th style="padding:2px 1px; font-size:7px; font-weight:600; border:1px solid #ddd;">${String(d).padStart(2,'0')}</th>`; }
+
+  const linhas = alunosDaTurma.map(function(a){
+    let faltasAluno = 0;
+    let celulas = '';
+    for(let d=1; d<=diasNoMes; d++){
+      const faltas = registrosDoMes[d];
+      let conteudo = '';
+      let estilo = 'padding:2px 1px; font-size:8px; text-align:center; border:1px solid #ddd;';
+      if(faltas!==undefined){
+        if(faltas.indexOf(a.id)!==-1){ conteudo='F'; estilo+='background:#FEF9C3; font-weight:700; color:#92400E;'; faltasAluno++; }
+        else { conteudo='P'; }
+      }
+      celulas += `<td style="${estilo}">${conteudo}</td>`;
+    }
+    return `<tr>
+      <td style="padding:3px 6px; font-size:9px; border:1px solid #ddd; white-space:nowrap;">${escapeHtml(a.nome)}</td>
+      ${celulas}
+      <td style="padding:3px 4px; font-size:9px; text-align:center; border:1px solid #ddd; font-weight:600;">${faltasAluno}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('printArea').innerHTML = `
+    <div style="font-family:Arial,Helvetica,sans-serif; color:#111;">
+      <div style="text-align:center; border-bottom:2px solid #1B2A4A; padding-bottom:10px; margin-bottom:12px;">
+        <div style="font-size:11px; color:#666; text-transform:uppercase; letter-spacing:.05em;">Mapa de frequência mensal</div>
+        <h1 style="font-size:16px; margin:4px 0 0;">${escapeHtml(turma?turma.nome:'')}</h1>
+        <div style="font-size:11px; color:#666; margin-top:2px;">${disciplina?escapeHtml(disciplina.nome)+' &nbsp;·&nbsp; ':''}${FREQ_MESES[mes-1]} de ${ano}</div>
+      </div>
+      <table style="border-collapse:collapse; width:100%; table-layout:fixed;">
+        <colgroup>
+          <col style="width:32mm;">
+          ${Array(diasNoMes).fill('<col style="width:6mm;">').join('')}
+          <col style="width:10mm;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th style="padding:3px 6px; font-size:8px; border:1px solid #ddd; text-align:left;">Aluno</th>
+            ${theadDias}
+            <th style="padding:2px 1px; font-size:7px; border:1px solid #ddd;">Tot.</th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <div style="margin-top:10px; font-size:10px; color:#444;">
+        <span style="padding:1px 5px; border:1px solid #ddd;">P</span> Presente &nbsp;&nbsp;
+        <span style="padding:1px 5px; border:1px solid #ddd; background:#FEF9C3; font-weight:700; color:#92400E;">F</span> Falta &nbsp;&nbsp;
+        <span style="color:#999;">célula em branco = dia sem registro</span>
+      </div>
+    </div>`;
+  const styleOverride = document.createElement('style');
+  styleOverride.id = 'printOrientationOverride';
+  styleOverride.textContent = '@page{ size: landscape; }';
+  document.head.appendChild(styleOverride);
+  window.print();
+  setTimeout(function(){ const el = document.getElementById('printOrientationOverride'); if(el) el.remove(); }, 500);
 }
 
 // ---------------- ALUNOS ----------------
