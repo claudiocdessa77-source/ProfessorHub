@@ -55,6 +55,14 @@
   .tab-btn.active{ border-color:#C89B3C; color:#1B2A4A; background:#fff; }
   .badge{ font-family:'IBM Plex Mono',monospace; font-size:.7rem; }
   input:focus, select:focus, textarea:focus{ outline: 2px solid #C89B3C; outline-offset:1px; }
+  [contenteditable][data-placeholder]:empty:before{ content: attr(data-placeholder); color:#9CA3AF; pointer-events:none; }
+  [contenteditable]:focus{ outline: 2px solid #C89B3C; outline-offset:1px; }
+  .rich-content ul{ list-style:disc; padding-left:1.25rem; margin:.35rem 0; }
+  .rich-content ol{ list-style:decimal; padding-left:1.25rem; margin:.35rem 0; }
+  .rich-content p{ margin:.4rem 0; }
+  .rich-content b, .rich-content strong{ font-weight:600; }
+  .rich-content i, .rich-content em{ font-style:italic; }
+  .rich-content a{ color:#1B2A4A; text-decoration:underline; }
   @media (prefers-reduced-motion: reduce){ *{ animation:none !important; transition:none !important; } }
   @media print{
     body *{ visibility:hidden; }
@@ -313,6 +321,12 @@ function escapeHtml(str){
   return String(str)
     .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
     .replaceAll('"','&quot;').replaceAll("'",'&#039;');
+}
+
+function stripHtml(html){
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html || '';
+  return tmp.textContent || tmp.innerText || '';
 }
 
 function fmtDate(d){
@@ -1114,7 +1128,8 @@ function renderFreqAlunosRegistro(disciplinaId){
     ${linhas}
     <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 flex-wrap gap-2">
       <span class="text-xs text-gray-500 font-mono">${totalPresentes} presente${totalPresentes===1?'':'s'} · ${totalFaltas} falta${totalFaltas===1?'':'s'}</span>
-      <div class="flex gap-2">
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="printFrequenciaDia('${disciplinaId}')" class="px-3 py-1.5 text-sm rounded-lg border border-gray-300">🖨️ Imprimir</button>
         <button onclick="limparFreqSelecao('${disciplinaId}')" class="px-3 py-1.5 text-sm rounded-lg border border-gray-300">Limpar seleção</button>
         <button onclick="salvarFrequencia('${disciplinaId}')" class="px-3 py-1.5 text-sm rounded-lg bg-navy-800 text-white font-medium">Salvar frequência</button>
       </div>
@@ -1150,6 +1165,47 @@ async function salvarFrequencia(disciplinaId){
   await loadAllData();
   renderFreqCalendario(disciplinaId);
   renderFreqAlunosRegistro(disciplinaId);
+}
+
+function printFrequenciaDia(disciplinaId){
+  if(!state.freq.regTurmaId || !state.freq.regDia){ toast('Selecione uma turma e um dia para imprimir.', 'error'); return; }
+  const turma = state.turmas.find(function(t){ return t.id===state.freq.regTurmaId; });
+  const disciplina = state.disciplinas.find(function(d){ return d.id===disciplinaId; });
+  const alunosDaTurma = state.alunos.filter(function(a){ return a.turmaId===state.freq.regTurmaId; }).sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt-BR'); });
+  if(alunosDaTurma.length===0){ toast('Nenhum aluno cadastrado nesta turma.', 'error'); return; }
+  const dataISO = state.freq.regAno+'-'+String(state.freq.regMes).padStart(2,'0')+'-'+String(state.freq.regDia).padStart(2,'0');
+  const totalFaltas = state.freq.pendingFaltas.size;
+  const totalPresentes = alunosDaTurma.length - totalFaltas;
+  document.getElementById('printArea').innerHTML = `
+    <div style="font-family:Arial,Helvetica,sans-serif; max-width:720px; margin:0 auto; color:#111; font-size:13px;">
+      <div style="text-align:center; border-bottom:2px solid #1B2A4A; padding-bottom:12px; margin-bottom:16px;">
+        <div style="font-size:11px; color:#666; text-transform:uppercase; letter-spacing:.05em;">Lista de frequência</div>
+        <h1 style="font-size:18px; margin:4px 0 0;">${escapeHtml(turma?turma.nome:'')}</h1>
+        <div style="font-size:12px; color:#666; margin-top:2px;">${disciplina?escapeHtml(disciplina.nome)+' &nbsp;·&nbsp; ':''}${fmtDate(dataISO)}</div>
+      </div>
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:1px solid #ccc; text-align:left;">
+            <th style="padding:6px 4px; font-size:11px; text-transform:uppercase; color:#666;">#</th>
+            <th style="padding:6px 4px; font-size:11px; text-transform:uppercase; color:#666;">Aluno</th>
+            <th style="padding:6px 4px; font-size:11px; text-transform:uppercase; color:#666; text-align:right;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${alunosDaTurma.map(function(a,i){
+            const faltou = state.freq.pendingFaltas.has(a.id);
+            return `<tr style="border-bottom:1px solid #eee;">
+              <td style="padding:6px 4px; color:#999;">${i+1}</td>
+              <td style="padding:6px 4px;">${escapeHtml(a.nome)}</td>
+              <td style="padding:6px 4px; text-align:right; font-weight:600; color:${faltou?'#B91C1C':'#166534'};">${faltou?'FALTA':'PRESENTE'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <div style="margin-top:14px; font-size:12px; color:#444;">${totalPresentes} presente${totalPresentes===1?'':'s'} · ${totalFaltas} falta${totalFaltas===1?'':'s'} de ${alunosDaTurma.length} aluno${alunosDaTurma.length===1?'':'s'}</div>
+      <div style="margin-top:40px; font-size:12px;">Assinatura do professor: _______________________________________________</div>
+    </div>`;
+  window.print();
 }
 
 // ---------------- ALUNOS ----------------
@@ -1721,13 +1777,100 @@ function openAulaViewModal(aulaId){
       </div>
       <h3 class="font-display font-semibold text-lg text-navy-900 mb-3">${escapeHtml(x.titulo)}</h3>
       <div class="text-sm text-navy-900 whitespace-pre-wrap max-h-[55vh] overflow-y-auto leading-relaxed">${x.conteudo?escapeHtml(x.conteudo):'<span class="text-gray-400">Sem conteúdo registrado.</span>'}</div>
-      <div class="flex justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
+      <div class="flex flex-wrap justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
         <button type="button" onclick="printAula('${x.id}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">🖨️ Imprimir</button>
+        <button type="button" onclick="copiarConteudoAula('${x.id}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">📋 Copiar</button>
+        <button type="button" onclick="openAulaResumoModal('${x.id}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">📝 ${x.resumo?'Editar resumo':'Resumo'}</button>
         <button type="button" onclick="openDuplicateAulaModal('${x.id}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Duplicar</button>
         <button type="button" onclick="openAulaFormModal('${state.currentDisciplinaId}','${x.id}')" class="px-4 py-2 text-sm rounded-lg bg-navy-800 text-white font-medium">Editar</button>
       </div>
     </div>`;
   showModal('wide');
+}
+
+async function copiarConteudoAula(aulaId){
+  const x = state.aulas.find(function(i){ return i.id===aulaId; });
+  if(!x) return;
+  const texto = x.titulo + '\n\n' + (x.conteudo||'');
+  try{
+    await navigator.clipboard.writeText(texto);
+    toast('Conteúdo copiado.');
+  } catch(error){
+    toast('Não foi possível copiar automaticamente. Selecione o texto manualmente.', 'error');
+  }
+}
+
+async function copiarHtmlComFormatacao(html, textoPlano, mensagemSucesso){
+  try{
+    if(window.ClipboardItem){
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], {type:'text/html'}),
+        'text/plain': new Blob([textoPlano], {type:'text/plain'})
+      });
+      await navigator.clipboard.write([item]);
+    } else {
+      await navigator.clipboard.writeText(textoPlano);
+    }
+    toast(mensagemSucesso);
+  } catch(error){
+    toast('Não foi possível copiar automaticamente. Selecione o texto manualmente.', 'error');
+  }
+}
+
+function copiarResumoAula(){
+  const el = document.getElementById('aulaResumoEditorQuick');
+  if(!el) return;
+  copiarHtmlComFormatacao(el.innerHTML, el.innerText, 'Resumo copiado.');
+}
+
+function printResumoAula(aulaId){
+  const x = state.aulas.find(function(i){ return i.id===aulaId; });
+  if(!x) return;
+  const el = document.getElementById('aulaResumoEditorQuick');
+  const resumoHtml = el ? el.innerHTML : (x.resumo||'');
+  if(!stripHtml(resumoHtml).trim()){ toast('Não há resumo para imprimir.', 'error'); return; }
+  document.getElementById('printArea').innerHTML = `
+    <div class="rich-content" style="font-family:Arial,Helvetica,sans-serif; max-width:720px; margin:0 auto; color:#111;">
+      <div style="font-size:11px; color:#666; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Resumo</div>
+      <h1 style="font-size:18px; margin:0 0 16px; border-bottom:2px solid #1B2A4A; padding-bottom:10px;">${escapeHtml(x.titulo)}</h1>
+      <div style="font-size:13px; line-height:1.7;">${resumoHtml}</div>
+    </div>`;
+  window.print();
+}
+
+function openAulaResumoModal(aulaId){
+  const x = state.aulas.find(function(i){ return i.id===aulaId; });
+  if(!x) return;
+  document.getElementById('modalContent').innerHTML = `
+    <form id="aulaResumoForm" class="p-5">
+      <h3 class="font-display font-semibold text-navy-900 mb-1">Resumo da aula</h3>
+      <p class="text-xs text-gray-500 mb-4">${escapeHtml(x.titulo)}</p>
+      <div id="aulaResumoEditorQuick" contenteditable="true" data-placeholder="Cole ou escreva o resumo desta aula..." class="rich-content w-full min-h-[180px] rounded-lg border border-gray-300 px-3 py-2 text-sm overflow-y-auto">${x.resumo||''}</div>
+      <p class="text-[11px] text-gray-400 mt-1.5">Colar aqui mantém a formatação (negrito, itálico, listas) do texto de origem.</p>
+      <div class="flex flex-wrap justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
+        <button type="button" onclick="copiarResumoAula()" class="px-4 py-2 text-sm rounded-lg border border-gray-300">📋 Copiar</button>
+        <button type="button" onclick="openAulaFormModal('${state.currentDisciplinaId}','${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Editar aula</button>
+        <button type="button" onclick="printResumoAula('${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">🖨️ Imprimir</button>
+        <button type="button" onclick="openAulaViewModal('${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Voltar</button>
+        <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-navy-800 text-white font-medium">Salvar resumo</button>
+      </div>
+    </form>`;
+  document.getElementById('aulaResumoForm').addEventListener('submit', function(e){ submitAulaResumo(e, aulaId); });
+  showModal('wide');
+}
+
+async function submitAulaResumo(e, aulaId){
+  e.preventDefault();
+  const editor = document.getElementById('aulaResumoEditorQuick');
+  const resumo = editor ? editor.innerHTML.trim() : '';
+  try{
+    await db.collection('aulas').doc(aulaId).update({ resumo: resumo||null, atualizadoEm: new Date().toISOString() });
+  } catch(error){ toast('Erro ao salvar resumo: '+error.message,'error'); return; }
+  toast('Resumo salvo.');
+  await loadAllData();
+  openAulaViewModal(aulaId);
+  const detailOpen = !document.getElementById('view-disciplina-detail').classList.contains('hidden');
+  if(detailOpen && state.currentTab==='aulas') renderAulasResults(state.currentDisciplinaId);
 }
 
 function printAula(aulaId){
