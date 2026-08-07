@@ -1781,6 +1781,21 @@ function copiarResumoAula(){
   copiarHtmlComFormatacao(el.innerHTML, el.innerText, 'Resumo copiado.');
 }
 
+function printResumoAula(aulaId){
+  const x = state.aulas.find(function(i){ return i.id===aulaId; });
+  if(!x) return;
+  const el = document.getElementById('aulaResumoEditorQuick');
+  const resumoHtml = el ? el.innerHTML : (x.resumo||'');
+  if(!stripHtml(resumoHtml).trim()){ toast('Não há resumo para imprimir.', 'error'); return; }
+  document.getElementById('printArea').innerHTML = `
+    <div class="rich-content" style="font-family:Arial,Helvetica,sans-serif; max-width:720px; margin:0 auto; color:#111;">
+      <div style="font-size:11px; color:#666; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Resumo</div>
+      <h1 style="font-size:18px; margin:0 0 16px; border-bottom:2px solid #1B2A4A; padding-bottom:10px;">${escapeHtml(x.titulo)}</h1>
+      <div style="font-size:13px; line-height:1.7;">${resumoHtml}</div>
+    </div>`;
+  window.print();
+}
+
 function openAulaResumoModal(aulaId){
   const x = state.aulas.find(function(i){ return i.id===aulaId; });
   if(!x) return;
@@ -1793,7 +1808,7 @@ function openAulaResumoModal(aulaId){
       <div class="flex flex-wrap justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
         <button type="button" onclick="copiarResumoAula()" class="px-4 py-2 text-sm rounded-lg border border-gray-300">📋 Copiar</button>
         <button type="button" onclick="openAulaFormModal('${state.currentDisciplinaId}','${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Editar aula</button>
-        <button type="button" onclick="printAula('${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">🖨️ Imprimir</button>
+        <button type="button" onclick="printResumoAula('${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">🖨️ Imprimir</button>
         <button type="button" onclick="openAulaViewModal('${aulaId}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Voltar</button>
         <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-navy-800 text-white font-medium">Salvar resumo</button>
       </div>
