@@ -1009,11 +1009,11 @@ function renderHorarioTab(disciplinaId){
 }
 
 function renderHorarioTurmaCard(t){
-  const horarios = (t.horarios||[]).slice().sort(function(a,b){ return a.diaSemana-b.diaSemana || (a.hora||'').localeCompare(b.hora||''); });
+  const horarios = (t.horarios||[]).slice().sort(function(a,b){ return a.diaSemana-b.diaSemana || (a.periodo||0)-(b.periodo||0); });
   return `<div class="border border-gray-200 rounded-lg p-4">
     <div class="font-medium text-sm text-navy-900 mb-2">${escapeHtml(t.nome)}</div>
     <div class="flex flex-wrap gap-1.5 mb-3">
-      ${horarios.length? horarios.map(function(h){ return `<span class="badge inline-flex items-center gap-1.5 px-2 py-1 rounded bg-navy-100 text-navy-800">${DIAS_SEMANA_ABREV[h.diaSemana]}${h.hora?' '+h.hora:''}<button onclick="removerHorarioTurma('${t.id}','${h.id}')" class="text-navy-800/60 hover:text-red-700">✕</button></span>`; }).join('') : '<span class="text-xs text-gray-400">Nenhum horário definido — todos os dias ficam ativos no calendário.</span>'}
+      ${horarios.length? horarios.map(function(h){ return `<span class="badge inline-flex items-center gap-1.5 px-2 py-1 rounded bg-navy-100 text-navy-800">${DIAS_SEMANA_ABREV[h.diaSemana]}${h.periodo?' · '+h.periodo+'º horário':(h.hora?' '+h.hora:'')}<button onclick="removerHorarioTurma('${t.id}','${h.id}')" class="text-navy-800/60 hover:text-red-700">✕</button></span>`; }).join('') : '<span class="text-xs text-gray-400">Nenhum horário definido — todos os dias ficam ativos no calendário.</span>'}
     </div>
     <div class="flex flex-wrap gap-2 items-end">
       <div>
@@ -1023,8 +1023,15 @@ function renderHorarioTurmaCard(t){
         </select>
       </div>
       <div>
-        <label class="block text-[11px] text-gray-500 mb-1">Hora (opcional)</label>
-        <input type="time" id="horarioHora_${t.id}" class="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
+        <label class="block text-[11px] text-gray-500 mb-1">Horário (opcional)</label>
+        <select id="horarioPeriodo_${t.id}" class="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
+          <option value="">—</option>
+          <option value="1">1º</option>
+          <option value="2">2º</option>
+          <option value="3">3º</option>
+          <option value="4">4º</option>
+          <option value="5">5º</option>
+        </select>
       </div>
       <button onclick="adicionarHorarioTurma('${t.id}')" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 hover:bg-gray-50">+ Adicionar</button>
     </div>
@@ -1033,10 +1040,10 @@ function renderHorarioTurmaCard(t){
 
 async function adicionarHorarioTurma(turmaId){
   const diaSel = document.getElementById('horarioDia_'+turmaId);
-  const horaSel = document.getElementById('horarioHora_'+turmaId);
+  const periodoSel = document.getElementById('horarioPeriodo_'+turmaId);
   const t = state.turmas.find(function(x){ return x.id===turmaId; });
   if(!t || !diaSel) return;
-  const novo = { id: 'h'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), diaSemana: parseInt(diaSel.value,10), hora: horaSel.value||null };
+  const novo = { id: 'h'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), diaSemana: parseInt(diaSel.value,10), periodo: periodoSel.value? parseInt(periodoSel.value,10) : null };
   const horarios = (t.horarios||[]).concat([novo]);
   try{ await db.collection('turmas').doc(turmaId).update({horarios: horarios}); }
   catch(error){ toast('Erro ao salvar horário: '+error.message,'error'); return; }
