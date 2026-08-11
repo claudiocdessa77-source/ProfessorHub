@@ -891,10 +891,50 @@ function renderVisaoGeralTab(id){
     return `<div><div class="text-xs font-medium text-gray-500 mb-1">${label}</div><div class="text-sm text-navy-900 whitespace-pre-wrap">${val?escapeHtml(val):'<span class="text-gray-400">Não informado.</span>'}</div></div>`;
   }
   box.innerHTML = `<div class="bg-white border border-gray-200 rounded-xl p-6 space-y-4 max-w-2xl">
-    ${campo('Ementa', d.ementa)}
+    <div>
+      <div class="text-xs font-medium text-gray-500 mb-1">Ementa</div>
+      ${renderEmentaTopicos(d)}
+    </div>
     ${campo('Objetivos', d.objetivos)}
     <div class="grid grid-cols-2 gap-4">${campo('Competências', d.competencias)}${campo('Habilidades', d.habilidades)}</div>
   </div>`;
+}
+
+function parseEmentaTopicos(ementa){
+  if(!ementa) return [];
+  return ementa.split(/\r?\n/).map(function(line){ return line.trim(); }).filter(function(line){ return line.length>0; }).map(function(line){ return line.replace(/^[•\-\*]\s*/, ''); });
+}
+
+function renderEmentaTopicos(d){
+  const topicos = parseEmentaTopicos(d.ementa);
+  if(topicos.length===0) return '<div class="text-sm text-gray-400">Não informado.</div>';
+  const concluidos = d.ementaConcluidos || [];
+  const feitos = topicos.filter(function(t){ return concluidos.indexOf(t)>-1; }).length;
+  return `<div class="text-xs text-gray-400 mb-1.5">${feitos} de ${topicos.length} tópico${topicos.length===1?'':'s'} já dado${topicos.length===1?'':'s'}</div>
+    <div>${topicos.map(function(topico, i){
+      const feito = concluidos.indexOf(topico)>-1;
+      return `<div class="flex items-start justify-between gap-3 py-1.5 border-b border-gray-50 last:border-0">
+        <div class="text-sm ${feito?'text-gray-400 line-through':'text-navy-900'} flex-1">• ${escapeHtml(topico)}</div>
+        <button onclick="toggleEmentaTopico('${d.id}', ${i})" title="${feito?'Marcar como não dado':'Marcar como já dado'}" class="shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${feito?'bg-green-500 border-green-500 text-white':'border-gray-300 text-transparent hover:border-gray-400'}">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        </button>
+      </div>`;
+    }).join('')}</div>`;
+}
+
+async function toggleEmentaTopico(disciplinaId, index){
+  const d = state.disciplinas.find(function(x){ return x.id===disciplinaId; });
+  if(!d) return;
+  const topicos = parseEmentaTopicos(d.ementa);
+  const topico = topicos[index];
+  if(topico===undefined) return;
+  const concluidos = (d.ementaConcluidos||[]).slice();
+  const pos = concluidos.indexOf(topico);
+  if(pos>-1) concluidos.splice(pos,1); else concluidos.push(topico);
+  try{ await db.collection('disciplinas').doc(disciplinaId).update({ementaConcluidos: concluidos}); }
+  catch(error){ toast('Erro ao salvar: '+error.message,'error'); return; }
+  await loadAllData();
+  renderVisaoGeralTab(disciplinaId);
 }
 
 // ============================================================
