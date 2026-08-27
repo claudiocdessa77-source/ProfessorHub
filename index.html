@@ -109,6 +109,7 @@
       <button onclick="showView('disciplinas')" class="text-white/80">Disciplinas</button>
       <button onclick="showView('horario')" class="text-white/80">Horário</button>
       <button onclick="showView('agenda')" class="text-white/80">Agenda</button>
+      <button onclick="showView('prompts')" class="text-white/80">Prompt</button>
       <button onclick="logout()" class="text-white/60">Sair</button>
     </div>
   </div>
@@ -134,6 +135,10 @@
         <button onclick="showView('agenda')" data-nav="agenda" class="nav-item w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 flex items-center gap-2.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           Agenda geral
+        </button>
+        <button onclick="showView('prompts')" data-nav="prompts" class="nav-item w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 flex items-center gap-2.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/></svg>
+          Prompt
         </button>
       </nav>
       <div class="px-3 py-4 border-t border-white/10">
@@ -247,6 +252,8 @@
           <div id="agendaGeralPagination" class="px-5 py-3 border-t border-gray-100 text-sm"></div>
         </div>
       </div>
+
+      <div id="view-prompts" class="ph-view p-6 md:p-8 hidden"></div>
     </main>
   </div>
 </div>
@@ -296,6 +303,7 @@ const state = {
   materiais: [],
   alunos: [],
   frequencia: [],
+  prompts: [],
   currentDisciplinaId: null,
   currentTab: 'visao',
   currentView: 'dashboard',
@@ -404,6 +412,7 @@ function showView(view){
   if(view==='disciplinas') renderDisciplinasList();
   if(view==='horario') renderHorarioGeral();
   if(view==='agenda') renderAgendaGeral();
+  if(view==='prompts') renderPromptsView();
 }
 
 // ============================================================
@@ -459,7 +468,8 @@ async function loadAllData(){
   const specs = [
     ['disciplinas','disciplinas'], ['turmas','turmas'], ['aulas','aulas'],
     ['diarioAula','diarios'], ['eventos','eventos'], ['bancoQuestoes','questoes'],
-    ['materiais','materiais'], ['alunos','alunos'], ['frequencia','frequencia']
+    ['materiais','materiais'], ['alunos','alunos'], ['frequencia','frequencia'],
+    ['prompts','prompts']
   ];
   const results = await Promise.allSettled(specs.map(function(s){
     return db.collection(s[0]).where('userId','==',uid).get();
@@ -475,6 +485,7 @@ async function loadAllData(){
   state.questoes.sort(function(a,b){ return (b.criadoEm||'').localeCompare(a.criadoEm||''); });
   state.materiais.sort(function(a,b){ return (b.criadoEm||'').localeCompare(a.criadoEm||''); });
   state.alunos.sort(function(a,b){ return (a.nome||'').localeCompare(b.nome||'','pt-BR'); });
+  state.prompts.sort(function(a,b){ return (b.criadoEm||'').localeCompare(a.criadoEm||''); });
   if(falhas.length){
     toast('Não foi possível carregar: '+falhas.join(', ')+'. Confira as regras do Firestore para essa(s) coleção(ões).', 'error');
   }
@@ -2690,6 +2701,146 @@ function renderAgendaGeral(){
 }
 
 function gotoAgendaGeralPage(p){ state.pagination.agendaGeral = p; renderAgendaGeral(); }
+
+// ============================================================
+// PROMPT (banco pessoal de prompts, global — fora de disciplinas)
+// ============================================================
+function renderPromptsView(){
+  const box = document.getElementById('view-prompts');
+  box.innerHTML = `
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div>
+        <h1 class="font-display font-bold text-2xl text-navy-900">Prompt</h1>
+        <p class="text-sm text-gray-500 mt-1">Seus prompts de IA salvos, prontos para copiar e usar</p>
+      </div>
+      <button onclick="openPromptFormModal()" class="bg-gold-500 hover:bg-gold-600 text-navy-900 font-medium text-sm rounded-lg px-4 py-2.5">+ Novo prompt</button>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl">
+      <div class="px-5 py-4 border-b border-gray-100 rounded-t-xl">
+        <input id="promptsFiltroBusca" placeholder="Buscar por nome ou descrição..." oninput="renderPromptsResults()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 w-full max-w-sm">
+      </div>
+      <div id="promptsResultsBox"></div>
+    </div>`;
+  renderPromptsResults();
+}
+
+function renderPromptsResults(){
+  const box = document.getElementById('promptsResultsBox');
+  if(!box) return;
+  const filtroEl = document.getElementById('promptsFiltroBusca');
+  const filtro = filtroEl ? filtroEl.value.toLowerCase().trim() : '';
+  let list = state.prompts;
+  if(filtro){
+    list = list.filter(function(p){
+      return (p.nome||'').toLowerCase().indexOf(filtro)>-1 || (p.descricao||'').toLowerCase().indexOf(filtro)>-1 || (p.prompt||'').toLowerCase().indexOf(filtro)>-1;
+    });
+  }
+  box.innerHTML = `<div class="divide-y divide-gray-100">
+    ${list.length? list.map(function(p){
+      const preview = (p.descricao || p.prompt || '').replace(/\s+/g,' ').trim();
+      const previewShort = preview.length>160 ? preview.slice(0,160)+'…' : preview;
+      return `<div class="px-5 py-4 cursor-pointer hover:bg-gray-50" onclick="openPromptViewModal('${p.id}')">
+        <div class="flex items-start justify-between gap-3">
+          <div class="text-sm font-semibold text-navy-900">${escapeHtml(p.nome)}</div>
+          <div class="flex gap-2 shrink-0">
+            <button onclick="event.stopPropagation(); copiarPrompt('${p.id}')" class="text-xs text-gold-600 underline">Copiar</button>
+            <button onclick="event.stopPropagation(); openPromptFormModal('${p.id}')" class="text-xs text-navy-800 underline">Editar</button>
+            <button onclick="event.stopPropagation(); deletePrompt('${p.id}')" class="text-xs text-red-700 underline">Excluir</button>
+          </div>
+        </div>
+        ${previewShort?`<div class="text-xs text-gray-500 mt-1">${escapeHtml(previewShort)}</div>`:''}
+      </div>`;
+    }).join('') : `<div class="py-12 text-center text-gray-400 text-sm">${filtro?'Nenhum prompt encontrado com esse termo.':'Nenhum prompt cadastrado ainda.'}</div>`}
+  </div>`;
+}
+
+function openPromptFormModal(promptId){
+  const p = promptId ? state.prompts.find(function(x){ return x.id===promptId; }) : null;
+  document.getElementById('modalContent').innerHTML = `
+    <form id="promptForm" class="p-5">
+      <h3 class="font-display font-semibold text-navy-900 mb-4">${p?'Editar prompt':'Novo prompt'}</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Nome *</label>
+          <input name="nome" required value="${escapeHtml(p?p.nome:'')}" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Ex.: Criar 20 questões sobre Maslow">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Prompt *</label>
+          <textarea name="prompt" required rows="8" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono" placeholder="Cole aqui o texto do prompt...">${escapeHtml(p?p.prompt:'')}</textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Descrição (opcional)</label>
+          <textarea name="descricao" rows="2" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Para que serve, quando usar...">${escapeHtml(p?p.descricao:'')}</textarea>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Cancelar</button>
+        <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-navy-800 text-white font-medium">Salvar</button>
+      </div>
+    </form>`;
+  document.getElementById('promptForm').addEventListener('submit', function(e){ submitPromptForm(e, promptId); });
+  showModal('wide');
+}
+
+async function submitPromptForm(e, promptId){
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const nowIso = new Date().toISOString();
+  const payload = {
+    nome: (fd.get('nome')||'').trim(),
+    prompt: (fd.get('prompt')||'').trim(),
+    descricao: (fd.get('descricao')||'').trim()||null,
+    atualizadoEm: nowIso
+  };
+  try{
+    if(promptId){ await db.collection('prompts').doc(promptId).update(payload); }
+    else { payload.userId = state.user.uid; payload.criadoEm = nowIso; await db.collection('prompts').add(payload); }
+  } catch(error){ toast('Erro ao salvar prompt: '+error.message,'error'); return; }
+  toast('Prompt salvo.');
+  closeModal();
+  await loadAllData();
+  if(!document.getElementById('view-prompts').classList.contains('hidden')) renderPromptsResults();
+}
+
+async function deletePrompt(id){
+  if(!confirm('Excluir este prompt?')) return;
+  try{ await db.collection('prompts').doc(id).delete(); }
+  catch(error){ toast('Erro ao excluir: '+error.message,'error'); return; }
+  toast('Prompt excluído.');
+  await loadAllData();
+  renderPromptsResults();
+}
+
+function openPromptViewModal(id){
+  const p = state.prompts.find(function(x){ return x.id===id; });
+  if(!p) return;
+  document.getElementById('modalContent').innerHTML = `
+    <div class="p-5">
+      <div class="flex items-start justify-between gap-3 mb-1">
+        <h3 class="font-display font-semibold text-lg text-navy-900">${escapeHtml(p.nome)}</h3>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 shrink-0">✕</button>
+      </div>
+      ${p.descricao?`<p class="text-sm text-gray-500 mb-3">${escapeHtml(p.descricao)}</p>`:''}
+      <div class="text-sm text-navy-900 whitespace-pre-wrap font-mono bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[45vh] overflow-y-auto">${escapeHtml(p.prompt)}</div>
+      <div class="flex flex-wrap justify-end gap-2 mt-5 pt-4 border-t border-gray-100">
+        <button type="button" onclick="deletePrompt('${p.id}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Excluir</button>
+        <button type="button" onclick="openPromptFormModal('${p.id}')" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Editar</button>
+        <button type="button" onclick="copiarPrompt('${p.id}')" class="px-4 py-2 text-sm rounded-lg bg-navy-800 text-white font-medium">📋 Copiar</button>
+      </div>
+    </div>`;
+  showModal('wide');
+}
+
+async function copiarPrompt(id){
+  const p = state.prompts.find(function(x){ return x.id===id; });
+  if(!p) return;
+  try{
+    await navigator.clipboard.writeText(p.prompt||'');
+    toast('Prompt copiado.');
+  } catch(error){
+    toast('Não foi possível copiar automaticamente. Selecione o texto manualmente.', 'error');
+  }
+}
 
 // ============================================================
 // BANCO DE QUESTÕES
